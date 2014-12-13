@@ -1,0 +1,306 @@
+#!/usr/bin/ksh
+
+exec 2>/dev/null
+
+# Author: xpt (xpt@olizarowicz.pl)
+# Scope: 2048 game written in ksh
+#	I was bored so i came up with copy of this game
+#
+#	Inspired by web version of the game:
+#	http://gabrielecirulli.github.io/2048/
+# Version: 1.0
+# Dependices: ksh dc stty dd
+#
+# TODO:
+#	1.) add random function for putting either 2 or 4 tile on the screen
+#	2.) fix bug with adding new tile when nothing changed on the grid
+#
+
+dump_array() {
+	printf "%s %s %s %s\n" "${array[@]}"
+}
+
+dump_tmp_col (){
+	printf "%s \n" "${tmp_col[@]}"
+	printf '\n'
+}
+
+print_grid () {
+	_row=$row
+	_col=$column
+
+	row=0
+	column=0
+	while [[ $row -le 3 ]] ; do
+		printf '+======+======+======+======+\n'
+		printf '|      |      |      |      |\n'
+		while [[ $column -le 3 ]]; do
+			_current="${array[$(( $column + 4 * $row ))]}"
+			[[ $_current -eq 0 ]] && _current=""
+			printf '| %4s ' "$_current"
+			unset _current
+			((column++))
+		done
+		printf '|\n'	
+		printf '|      |      |      |      |\n'
+			((row++))
+			column=0
+	done
+	printf '+======+======+======+======+\n'
+	row=$_row
+	column=$_col
+}
+
+array=(\
+ 0   0   0   0 \
+ 0   0   0   0 \
+ 0   0   0   0 \
+ 0   0   0   0 )
+
+get_input () {
+	stty -icanon
+		printf  "press up key ... "
+		up="$(dd count=1)"
+		printf  "\npress down key ... "
+		down="$(dd count=1)"
+		printf  "\npress left key ... "
+		left="$(dd count=1)"
+		printf  "\npress right key ... "
+		right="$(dd count=1)"
+	stty icanon
+}
+
+test_input () {
+	stty -icanon
+	while true; do 
+		printf 'press up/down/left/right key\n'
+		input="$(dd count=1  2>/dev/null)"
+		case "$input" in
+			$up) printf "you pressed up key\n";;
+			$down) printf "you pressed down key\n" ;;
+			$left) printf "you pressed left key\n" ;;
+			$right) printf "you pressed right key\n" ;;
+			*) printf "that's not your directional key\n"
+		esac
+		break
+	done
+	stty icanon
+}
+
+move_left () {
+	row=0
+
+	#Iterating for every column
+	while [[ $row -le 3 ]]; do
+		#just to be sure... unsetting temporary variables
+		unset tmp_array tmp_arr_position
+		column=0
+
+		#populating tempopary arrays
+		#with the values of rows
+		#and skipping 0
+
+		while [[ $column -le 3 ]]; do
+			populate_tmp_array
+			((column++))
+		done
+
+		shrink_tmp_arr
+
+		update_main_array
+
+		((row++))
+	done
+}
+
+
+populate_tmp_array () {
+	set -A tmp_arr_position -- \
+		"${tmp_arr_position[@]}" "$((column + 4 * $row ))"
+	[[ ${array[$((column + 4 * $row ))]} -gt 0 ]] && set -A tmp_array -- \
+		"${tmp_array[@]}" "${array[$((column + 4 * $row ))]}"
+}
+
+shrink_tmp_arr () {
+	i=0
+	max="${#tmp_array[@]}"
+	
+	#checking if two tiles can be added
+	while [[ $i -le $max ]]; do
+		if [[ "${tmp_array[$i]}" -eq "${tmp_array[$(($i+1))]}" ]] ; then
+			tmp_array[$i]=$(( 2 * tmp_array[$i] ))
+			unset tmp_array[$(($i+1))]
+			#set -A tmp_array -- "${tmp_array[@]}"
+			(( i++ ))
+		fi
+		(( i++ ))
+	done
+	set -A tmp_array -- "${tmp_array[@]}" 
+}
+
+update_main_array () {
+	i=0
+	max="${#tmp_array[@]}"
+
+	#updating main array with proper numebers
+	while [[ $i -le 3 ]]; do
+		array[${tmp_arr_position[$i]}]="${tmp_array[$i]:-0}"
+		((i++))
+	done
+}
+
+move_up () {
+	column=0
+
+	#Iterating for every column
+	while [[ $column -le 3 ]]; do
+		#just to be sure... unsetting temporary variables
+		unset tmp_array tmp_arr_position
+		row=0
+
+		#populating tempopary arrays
+		#with the values of rows
+		#and skipping 0
+
+		while [[ $row -le 3 ]]; do
+			populate_tmp_array
+			((row++))
+		done
+
+		shrink_tmp_arr
+
+		update_main_array
+
+		((column++))
+	done
+}
+
+move_down () {
+	column=0
+
+	#Iterating for every column
+	while [[ $column -le 3 ]]; do
+		#just to be sure... unsetting temporary variables
+		unset tmp_array tmp_arr_position
+		row=3
+
+		#populating tempopary arrays
+		#with the values of rows
+		#and skipping 0
+
+		while [[ $row -ge 0 ]]; do
+			populate_tmp_array
+			((row--))
+		done
+
+		shrink_tmp_arr
+
+		update_main_array
+
+		((column++))
+	done
+}
+
+move_right () {
+	row=0
+
+	#Iterating for every column
+	while [[ $row -le 3 ]]; do
+		#just to be sure... unsetting temporary variables
+		unset tmp_array tmp_arr_position
+		column=3
+
+		#populating tempopary arrays
+		#with the values of rows
+		#and skipping 0
+		
+		while [[ $column -ge 0 ]]; do
+			populate_tmp_array
+			((column--))
+		done
+		shrink_tmp_arr
+		update_main_array
+		((row++))
+	done
+}
+
+random_ () {
+	stty -icanon
+		rand_ff="$(dd count=1 </dev/random 2>/dev/null)"
+	stty icanon
+	return printf "%s\n" "$rand_ff" 
+}
+
+add_number () {
+	unset zero_position i j 
+	i=0
+	j="$({ date +%N; printf '%s\n' "100 / 8 % p"; } | dc )"
+	[[ $j -le 6 ]] && j=2 || j=4
+	
+	while [[ $i -lt ${#array[@]} ]]; do
+		[[ array[$i] -eq 0 ]] && \
+			set -A zero_position -- "${zero_position[@]}"  $i
+		((i++))
+	done
+	
+	i="$({ printf '%s + ' "${array[@]}" "$(date +%N)"; 
+		printf "%s " "${#zero_position[@]}" "% p";
+	} | dc)"
+	
+	array[${zero_position[$i]}]=$j
+}
+
+#END OF FUNCTIONS
+
+get_input
+#test_input
+#dump_array
+add_number
+print_grid
+
+while true; do 
+	stty -icanon
+	while true; do 
+		set -A original_array -- "${array[@]}"
+		printf 'press up/down/left/right key\n'
+		input="$(dd count=1  2>/dev/null)"
+		case "$input" in
+			$up) move_up;;
+			$down) move_down ;;
+			$left) move_left ;;
+			$right) move_right;;
+			*) printf "that's not your directional key\n"
+		esac
+		set -x
+		[[ "${original_array[@]}" == "${array[@]}" ]] && { printf "nothing changed\n" ; continue 2; }
+
+		set +x
+		sleep 1
+		break
+	done
+	stty icanon
+	
+	add_number
+	clear
+	print_grid
+done
+
+# Copyright Jakub Olizarowicz <xpt@olizarowicz.pl>
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to
+# deal in the Software without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+# sell copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+# IN THE SOFTWARE.

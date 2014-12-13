@@ -1,0 +1,289 @@
+#!/usr/bin/bash
+
+# Author: xpt (xpt@olizarowicz.pl)
+# Scope: 2048 game written in ksh^Wbash
+#	I was supposed to write something in bash
+#	so i came up with an idea to rewrite ksh 
+#	version into bash
+#
+#	Inspired by web version of the game:
+#	http://gabrielecirulli.github.io/2048/
+#
+
+dump_array() {
+	printf "%s %s %s %s\n" "${array[@]}"
+}
+
+array=(
+0   0   0   0
+0   0   0   0
+0   0   0   0
+0   0   0   0 ) ;
+
+print_grid () {
+	_row=$row
+	_col=$column
+	row=0
+	column=0
+	while [[ $row -le 3 ]] ; do
+		printf "+======+======+======+======+\n"
+		printf "|      |      |      |      |\n"
+		while [[ $column -le 3 ]]; do
+			_current="${array[$(( $column + 4 *$row))]}"
+			[[ $_current -eq 0 ]] && _current=""
+			printf "| %4s " "$_current"
+			unset _current
+			((column++))
+		done
+		printf "|\n"
+		printf "|      |      |      |      |\n"
+		((row++))
+		column=0
+	done
+	printf "+======+======+======+======+\n"
+	row=$_row
+	column=$_col
+}
+
+get_input () {
+	stty -icanon
+	printf  "press up key ... "
+	up="$(dd count=1 2>/dev/null)"
+	printf  "\npress down key ... "
+	down="$(dd count=1 2>/dev/null)"
+	printf  "\npress left key ... "
+	left="$(dd count=1 2>/dev/null)"
+	printf  "\npress right key ... "
+	right="$(dd count=1 2>/dev/null)"
+	echo
+	stty icanon
+}
+
+test_input () {
+	stty -icanon
+	while true; do
+	printf "press up/down/left/right key\n"
+	input="$(dd count=1  2>/dev/null)"
+	case "$input" in
+		$up) printf "you pressed up key\n";;
+		$down) printf "you pressed down key\n" ;;
+		$left) printf "you pressed left key\n" ;;
+		$right) printf "you pressed right key\n" ;;
+		*) printf "that is not your directional key\n"
+	esac
+	break
+	done
+	stty icanon
+}
+
+move_left () {
+	row=0
+	while [[ $row -le 3 ]]; do
+		unset tmp_array tmp_arr_position
+		column=0
+		
+		while [[ $column -le 3 ]]; do
+			populate_tmp_array
+			((column++))
+		done
+		
+		shrink_tmp_arr
+		
+		update_main_array
+		
+		((row++))
+	done
+	}
+	
+	populate_tmp_array () {
+	tmp_arr_position=("${tmp_arr_position[@]}" "$((column + 4 * $row ))")
+	[[ ${array[$((column + 4 * $row ))]} -gt 0 ]] &&
+	tmp_array=("${tmp_array[@]}"                             \
+	"${array[$((column + 4 * $row ))]}")
+}
+
+shrink_tmp_arr (){
+	i=0
+	max="${#tmp_array[@]}"
+	
+	while [[ $i -le $max ]]; do
+		if [[ "${tmp_array[$i]}" -eq "${tmp_array[$(($i+1))]}" ]] ;
+		then
+			tmp_array[$i]=$(( 2 * tmp_array[$i] ))
+			unset tmp_array[$(($i+1))]
+			(( i++ ))
+		fi
+		(( i++ ))
+	done
+	tmp_array=("${tmp_array[@]}")
+}
+
+update_main_array () {
+	i=0
+	max="${#tmp_array[@]}"
+	
+	while [[ $i -le 3 ]]; do
+		array[${tmp_arr_position[$i]}]="${tmp_array[$i]:-0}"
+		((i++))
+	done
+}
+
+move_up () {
+	column=0
+	while [[ $column -le 3 ]]; do
+		unset tmp_array tmp_arr_position
+		row=0
+		
+		while [[ $row -le 3 ]]; do
+			populate_tmp_array
+			((row++))
+		done
+		
+		shrink_tmp_arr
+		
+		update_main_array
+		
+		((column++))
+	done
+}
+
+move_down () {
+	column=0
+	
+	while [[ $column -le 3 ]]; do
+		unset tmp_array tmp_arr_position
+		row=3
+		
+		while [[ $row -ge 0 ]]; do
+			populate_tmp_array
+			((row--))
+		done
+		
+		shrink_tmp_arr
+		
+		update_main_array
+		
+		((column++))
+	done
+}
+
+move_right () {
+	row=0
+	
+	while [[ $row -le 3 ]]; do
+		unset tmp_array tmp_arr_position
+		column=3
+		
+		while [[ $column -ge 0 ]]; do
+			populate_tmp_array
+			((column--))
+		done
+		shrink_tmp_arr
+		update_main_array
+		((row++))
+	done
+}
+random_ () {
+	stty -icanon
+	rand_ff="$(dd count=1 </dev/random 2>/dev/null)"
+	stty icanon
+	return echo "$rand_ff"
+}
+
+add_number () {
+	unset  zero_position i
+	i=0
+	while [[ $i -lt ${#array[@]} ]]; do
+		[[ array[$i] -eq 0 ]] && \
+		zero_position=("${zero_position[@]}"  $i)
+		((i++))
+	done
+	i="$(date +%S)"
+	i="${i#0}"
+	i=$(( $i % ${#zero_position[@]}))
+	j=$RANDOM
+	[[ $j -eq 0 ]] && j=4 || j=2
+	
+	array[${zero_position[$i]}]=$j
+}
+
+test_available () {
+	original_array=("${array[@]}")
+	move_left
+	[[ "${original_array[@]}" == "${array[@]}" ]]
+	al=$?
+	array=("${original_array[@]}")
+	move_right
+	[[ "${original_array[@]}" == "${array[@]}" ]]
+	ar=$?
+	array=("${original_array[@]}")
+	move_up
+	[[ "${original_array[@]}" == "${array[@]}" ]]
+	au=$?
+	array=("${original_array[@]}")
+	move_down
+	[[ "${original_array[@]}" == "${array[@]}" ]]
+	ad=$?
+	array=("${original_array[@]}")
+	(( $al + $ar + $au + $ad )) || {
+		echo Game over \:\)
+		exit 0
+	}
+	available="Available directions: "
+	(( $al )) && available="${available}left "
+	(( $ar )) && available="${available}right "
+	(( $au )) && available="${available}up "
+	(( $ad )) && available="${available}down"
+	echo $available
+}
+
+get_input
+move_left
+add_number
+clear
+print_grid
+
+while true; do
+	stty -icanon
+	while true; do
+		original_array=("${array[@]}")
+		available="press up/down/left/right key\n"
+		test_available
+		input="$(dd count=1  2>/dev/null)"
+		case "$input" in
+			$up) move_up;;
+			$down) move_down ;;
+			$left) move_left ;;
+			$right) move_right;;
+			*) printf "that iss not your directional key\n"
+		esac
+		[[ "${original_array[@]}" == "${array[@]}" ]] &&continue 2
+		break
+	done
+	stty icanon
+	
+	add_number
+	clear
+	print_grid
+done
+
+
+# Copyright Jakub Olizarowicz <xpt@olizarowicz.pl>
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to
+# deal in the Software without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+# sell copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+# IN THE SOFTWARE.
